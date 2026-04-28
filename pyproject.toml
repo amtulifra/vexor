@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vexor"
+version = "0.1.0"
+description = "A vector database built from first principles — fast ANN search with live algorithm visualizations."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26,<2.0",
+    "numba>=0.59,<0.66",
+    "pyroaring>=0.4",
+    "scikit-learn>=1.4,<2.0",
+    "streamlit>=1.32,<1.46",
+    "plotly>=5.20,<7.0",
+    "networkx>=3.2",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.1",
+    "hypothesis>=6.100",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

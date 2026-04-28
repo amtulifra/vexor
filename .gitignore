@@ -1,0 +1,43 @@
+.venv
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+.env
+.env.*
+*.env
+*.bak
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Ignore coverage reports
+htmlcov/
+.coverage
+.coverage.*
+# Ignore virtual environment directories
+venv/
+env/
+
+# Ignore pytest cache
+.pytest_cache/  
+# Ignore mypy cache
+.mypy_cache/
+# Ignore Sphinx build files
+docs/_build/
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Ignore VSCode settings
+.vscode/
+
