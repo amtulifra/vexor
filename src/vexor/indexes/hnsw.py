@@ -27,6 +27,9 @@ from vexor.filtering.adaptive import adaptive_ef
 from vexor.concurrency.locks import NodeLockRegistry
 from vexor.hooks.base import VexorHook
 from vexor.hooks.noop import NoopHook
+from vexor.distance.kernels_jit import (
+    cosine_distance_jit, l2_distance_jit, inner_product_distance_jit,
+)
 
 
 _COMPACTION_THRESHOLD = 0.20
@@ -302,32 +305,56 @@ class HNSWIndex:
         """Diverse neighbor selection heuristic from Malkov & Yashunin 2018."""
         sorted_cands = sorted(candidates, key=lambda x: x[0])
         selected: list[int] = []
+        selected_vecs: list[np.ndarray] = []
 
         for d, vid in sorted_cands:
             if len(selected) >= M:
                 break
             if vid in self._deleted:
                 continue
-            dominated = any(
-                self._dist(self._vectors[vid], self._vectors[s]) < d
-                for s in selected
-            )
-            if not dominated:
-                selected.append(vid)
+            if selected_vecs:
+                # Vectorized dominance check: is any selected neighbor closer to
+                # this candidate than the candidate-to-query distance?
+                mat = np.vstack(selected_vecs)
+                dists = self._batch_dist_to(self._vectors[vid], mat)
+                if float(dists.min()) < d:
+                    continue
+            selected.append(vid)
+            selected_vecs.append(self._vectors[vid])
 
         return selected
 
     def _dist(self, a: np.ndarray, b: np.ndarray) -> float:
         if self._metric == "l2":
-            diff = a - b
-            return float(np.dot(diff, diff))
+            return float(l2_distance_jit(a, b))
         if self._metric == "cosine":
-            dot = float(np.dot(a, b))
-            na = float(np.linalg.norm(a))
-            nb = float(np.linalg.norm(b))
-            return 1.0 - dot / (na * nb) if na > 0 and nb > 0 else 1.0
-        # inner_product
-        return float(1.0 - np.dot(a, b))
+            return float(cosine_distance_jit(a, b))
+        return float(inner_product_distance_jit(a, b))
+
+    def _batch_dist_to(self, query: np.ndarray, matrix: np.ndarray) -> np.ndarray:
+        """Distances from query to each row of matrix. Returns (N,) float32 array."""
+        if self._metric == "l2":
+            diff = matrix - query
+            return np.einsum("ij,ij->i", diff, diff, dtype=np.float32)
+        if self._metric == "cosine":
+            dots = matrix @ query
+            qnorm = float(np.linalg.norm(query))
+            rnorms = np.linalg.norm(matrix, axis=1)
+            denom = rnorms * qnorm
+            np.maximum(denom, 1e-10, out=denom)
+            return (1.0 - dots / denom).astype(np.float32)
+        return (1.0 - matrix @ query).astype(np.float32)
+
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        del state["_global_lock"]
+        del state["_lock_registry"]
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._global_lock = threading.Lock()
+        self._lock_registry = NodeLockRegistry()
 
     def _random_layer(self) -> int:
         return int(math.floor(-math.log(random.random()) * self._mL))

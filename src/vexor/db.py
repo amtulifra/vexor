@@ -17,13 +17,14 @@ from vexor.indexes.kdtree import KDTreeIndex
 from vexor.indexes.hnsw import HNSWIndex
 from vexor.indexes.ivf import IVFIndex
 from vexor.indexes.ivfpq import IVFPQIndex
+from vexor.indexes.lsh import LSHIndex
 from vexor.storage.wal import WriteAheadLog
 from vexor.storage.format import save_index, load_index
 from vexor.filtering.bitmap import Filter
 from vexor.hooks.base import VexorHook
 from vexor.hooks.noop import NoopHook
 
-_INDEX_TYPES = {"flat", "kdtree", "hnsw", "ivf", "ivfpq"}
+_INDEX_TYPES = {"flat", "kdtree", "hnsw", "ivf", "ivfpq", "lsh"}
 _WAL_OP_INSERT = 1
 _WAL_OP_DELETE = 2
 
@@ -156,4 +157,6 @@ class VectorDB:
             return IVFIndex(metric=metric, hook=hook, **kwargs)
         if index_type == "ivfpq":
             return IVFPQIndex(metric=metric, hook=hook, **kwargs)
+        if index_type == "lsh":
+            return LSHIndex(dim=dim, metric=metric, **kwargs)
         raise ValueError(f"Unknown index_type: {index_type}")

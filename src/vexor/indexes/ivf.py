@@ -10,6 +10,7 @@ Improvements over a static IVF:
 """
 
 from __future__ import annotations
+import heapq
 import numpy as np
 from typing import Any
 
@@ -71,6 +72,7 @@ class IVFIndex:
         self._global_bitmap = BitmapIndex()
         self._is_trained = False
         self._insert_count = 0
+        self._centroid_neighbors: np.ndarray | None = None  # (nlist, k_graph)
 
     @property
     def size(self) -> int:
@@ -88,21 +90,20 @@ class IVFIndex:
 
         for _ in range(n_iter):
             assignments = self._assign_all(matrix)
+            # Vectorized centroid update via scatter-add
             new_centroids = np.zeros_like(self._centroids)
-            counts = np.zeros(self._nlist, dtype=np.int32)
-            for i, c in enumerate(assignments):
-                new_centroids[c] += matrix[i]
-                counts[c] += 1
+            counts = np.bincount(assignments, minlength=self._nlist).astype(np.int32)
+            np.add.at(new_centroids, assignments, matrix)
             for c in range(self._nlist):
                 if counts[c] > 0:
                     old = self._centroids[c].copy()
                     self._centroids[c] = new_centroids[c] / counts[c]
                     self._hook.on_centroid_update(c, old, self._centroids[c])
                 else:
-                    random_vec = matrix[rng.integers(len(matrix))]
-                    self._centroids[c] = random_vec
+                    self._centroids[c] = matrix[rng.integers(len(matrix))]
 
         self._is_trained = True
+        self._build_centroid_graph()
 
     def add(self, vector: np.ndarray, metadata: dict[str, Any] | None = None) -> int:
         if not self._is_trained:
@@ -147,7 +148,7 @@ class IVFIndex:
             effective_nprobe = adaptive_nprobe(effective_nprobe, self._nlist,
                                                nearest_dist, mean_dist)
 
-        probed_centroids = np.argsort(centroid_dists)[:effective_nprobe]
+        probed_centroids = self._beam_search_centroids(centroid_dists, effective_nprobe)
 
         if filter:
             filter_bitmap = self._global_bitmap.query(filter)
@@ -174,9 +175,58 @@ class IVFIndex:
         dists = self._batch_dist(vec, self._centroids)
         return int(np.argmin(dists))
 
+    def _all_centroid_dists(self, matrix: np.ndarray) -> np.ndarray:
+        """Vectorized (N, nlist) distance matrix from every row to every centroid."""
+        C = self._centroids
+        if self._metric == "l2":
+            x_sq = np.einsum("ij,ij->i", matrix, matrix)[:, None]
+            c_sq = np.einsum("ij,ij->i", C, C)
+            return x_sq + c_sq - 2.0 * (matrix @ C.T)
+        if self._metric == "cosine":
+            x_norm = np.linalg.norm(matrix, axis=1, keepdims=True)
+            c_norm = np.linalg.norm(C, axis=1, keepdims=True)
+            x_unit = matrix / np.where(x_norm == 0, 1e-10, x_norm)
+            c_unit = C / np.where(c_norm == 0, 1e-10, c_norm)
+            return 1.0 - x_unit @ c_unit.T
+        # inner_product
+        return 1.0 - matrix @ C.T
+
     def _assign_all(self, matrix: np.ndarray) -> np.ndarray:
-        dists = np.stack([self._batch_dist(matrix[i], self._centroids) for i in range(len(matrix))])
-        return np.argmin(dists, axis=1)
+        return np.argmin(self._all_centroid_dists(matrix), axis=1).astype(np.int32)
+
+    def _build_centroid_graph(self, k: int = 8) -> None:
+        """Precompute k nearest centroid neighbors for beam search during query."""
+        dists = self._all_centroid_dists(self._centroids)
+        np.fill_diagonal(dists, np.inf)
+        k = min(k, self._nlist - 1)
+        self._centroid_neighbors = np.argsort(dists, axis=1)[:, :k]
+
+    def _beam_search_centroids(self, centroid_dists: np.ndarray, nprobe: int) -> list[int]:
+        """
+        Greedy beam search over the centroid proximity graph.
+
+        Starts at the nearest centroid and expands via precomputed neighbors,
+        always visiting the cheapest unexplored centroid next. Near cluster
+        boundaries this finds better probing sets than a raw distance sort.
+        """
+        if self._centroid_neighbors is None:
+            return list(np.argsort(centroid_dists)[:nprobe])
+
+        start = int(np.argmin(centroid_dists))
+        visited: set[int] = {start}
+        heap: list[tuple[float, int]] = [(float(centroid_dists[start]), start)]
+        probed: list[int] = []
+
+        while heap and len(probed) < nprobe:
+            _, best = heapq.heappop(heap)
+            probed.append(best)
+            for nb in self._centroid_neighbors[best]:
+                nb = int(nb)
+                if nb not in visited:
+                    visited.add(nb)
+                    heapq.heappush(heap, (float(centroid_dists[nb]), nb))
+
+        return probed
 
     def _incremental_update(self, centroid_id: int, vec: np.ndarray) -> None:
         lr = _ONLINE_LR_INIT / (1.0 + self._insert_count * _ONLINE_LR_DECAY)

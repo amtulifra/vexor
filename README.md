@@ -365,6 +365,7 @@ python bench/recall_qps.py       # Recall@10 vs QPS curves → bench/results/
 python bench/filter_bench.py     # In-graph vs post-filter recall comparison
 python bench/memory_bench.py     # Compression/recall tradeoff for IVFPQ
 python bench/concurrency_bench.py
+python bench/latency_percentile_bench.py  # p50/p95/p99 vs recall
 ```
 
 
@@ -377,6 +378,7 @@ python bench/concurrency_bench.py
 | **Filtered search** | Recall holds above 0.90 at 5% selectivity with in-graph filtering. Post-filter would silently return 2–3 results for k=10 at the same selectivity. |
 | **Memory** | IVFPQ at M=8 uses 8 bytes/vector vs 256 bytes for Flat/HNSW (float32, D=64). HNSW adds ~2× overhead from graph edges on top of raw vectors. |
 | **Concurrency** | Threading degrades with more threads (GIL — 906 QPS at 1 thread, 193 at 16). Multiprocessing bypasses the GIL but index rebuild cost per worker dominates at this dataset size. |
+| **Latency percentiles** | HNSW has a tight tail — p99 is only 1.2× p50 (e.g. 1.31ms vs 1.19ms at recall 0.93). IVF's tail is much wider — p99 can be 8× p50 at low nprobe due to high variance in cluster sizes near boundaries. |
 
 
 Charts saved to `bench/results/`.
@@ -478,21 +480,25 @@ Rule of thumb: `ef_search ≥ k`. For recall > 0.99, `ef_search ≈ 3–5 × k`.
 
 **Performance**
 - [ ] Move distance kernels to C extensions (ctypes/Cython) to break out of the GIL entirely — threading would then scale linearly
-- [ ] Serialize index to shared memory so multiprocessing workers skip the rebuild cost — would make the concurrency benchmark reflect true search throughput
+- [x] HNSW `_dist` now uses Numba JIT kernels — eliminates Python-level NumPy dispatch on the search hot path
+- [x] HNSW dominance check in `_select_neighbors` vectorized — replaced Python `any()` loop with a single numpy batch op
+- [x] IVF centroid assignment vectorized — `_assign_all` and `train` now use matrix ops instead of Python loops
+- [x] ShardedIndex parallel search fixed — uses fork context for zero-copy COW shard access; no index rebuild per query
 - [ ] GPU distance kernels via CuPy for batch query workloads
 - [ ] SIMD-explicit AVX2 path for L2/cosine on float32 (Numba `fastmath` is close but not guaranteed)
 
 
 **Index quality**
-- [ ] Implement HNSW `select_neighbors_heuristic` (Algorithm 4 in the paper) — improves long-range connectivity vs the current simple top-M selection
-- [ ] Add LSH index for ultra-low-memory approximate search
-- [ ] Beam search for IVF to handle near-boundary queries without raising nprobe globally
+- [x] HNSW `select_neighbors_heuristic` (Algorithm 4) — diverse neighbor selection with vectorized dominance check
+- [x] LSH index added (`src/vexor/indexes/lsh.py`) — random hyperplane projection, L tables, 1-bit neighbor expansion fallback; available as `index_type="lsh"` in VectorDB
+- [x] IVF centroid proximity graph + beam search — precomputed k-NN graph among centroids after `train()`; `search()` uses greedy beam expansion instead of raw distance sort for better cluster selection near boundaries
+- [ ] Beam search for IVF without raising nprobe globally (further tuning)
 
 
 **Benchmarking**
 - [ ] Run at full scale (N=500K, D=768) to validate the numbers in the overview table
 - [ ] Separate index build time from query time in `concurrency_bench.py` to get clean steady-state QPS numbers for multiprocessing
-- [ ] Add a recall-vs-latency-percentile (p50/p95/p99) benchmark — QPS alone hides tail latency
+- [x] Recall-vs-latency-percentile benchmark added (`bench/latency_percentile_bench.py`) — p50/p95/p99 per query, plotted against recall for HNSW and IVF parameter sweeps
 
 
 **API / usability**
