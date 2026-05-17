@@ -26,7 +26,6 @@ Layout:
 
 from __future__ import annotations
 import json
-import pickle
 import struct
 import zlib
 from pathlib import Path
@@ -82,7 +81,7 @@ def save_index(index, path: str | Path, index_type: str) -> None:
         f.write(meta_crc)
 
 
-def load_index(path: str | Path):
+def load_index(path: str | Path, mmap_vectors: bool = False):
     path = Path(path)
     with open(path, "rb") as f:
         header_raw = f.read(_HEADER_SIZE)
@@ -91,11 +90,15 @@ def load_index(path: str | Path):
         if magic != _MAGIC:
             raise ValueError(f"Invalid magic bytes: {magic!r}")
 
-        vec_bytes = f.read(n * dim * 4)
+        vec_nbytes = n * dim * 4
+        vec_bytes = f.read(vec_nbytes)
         stored_crc = struct.unpack("!I", f.read(4))[0]
         if zlib.crc32(vec_bytes) & 0xFFFFFFFF != stored_crc:
             raise ValueError("Vector section CRC32 mismatch — file may be corrupt.")
-        vectors = np.frombuffer(vec_bytes, dtype=np.float32).reshape(n, dim).copy()
+        if mmap_vectors and n > 0 and dim > 0:
+            vectors = np.memmap(path, dtype=np.float32, mode="r", offset=_HEADER_SIZE, shape=(n, dim))
+        else:
+            vectors = np.frombuffer(vec_bytes, dtype=np.float32).reshape(n, dim).copy()
 
         struct_len = struct.unpack("!Q", f.read(8))[0]
         struct_bytes = f.read(struct_len)

@@ -58,6 +58,9 @@ class KDTreeIndex:
 
     def build(self) -> None:
         """Build the tree from all added vectors. Must be called before search."""
+        if not self._vectors:
+            self._root = None
+            return
         ids = list(range(len(self._vectors)))
         matrix = np.stack(self._vectors)
         self._root = self._build_node(ids, matrix, depth=0)
@@ -96,6 +99,8 @@ class KDTreeIndex:
         k: int,
         filter: Filter | None = None,
     ) -> list[tuple[int, float]]:
+        if not self._vectors:
+            return []
         if self._root is None:
             raise RuntimeError("Call build() before search().")
 

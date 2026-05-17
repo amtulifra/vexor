@@ -10,6 +10,7 @@ recall/speed tradeoff curve. Saves bench/results/recall_qps.png.
 
 from __future__ import annotations
 import sys, os, time
+import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 
 import matplotlib
@@ -24,12 +25,20 @@ from vexor.indexes.ivf import IVFIndex
 from vexor.indexes.ivfpq import IVFPQIndex
 
 
-N = 5_000
-DIM = 64
-N_QUERIES = 200
-K = 10
+parser = argparse.ArgumentParser(description="Recall@10 vs QPS benchmark.")
+parser.add_argument("--n", type=int, default=5_000, help="Number of vectors.")
+parser.add_argument("--dim", type=int, default=64, help="Vector dimensionality.")
+parser.add_argument("--queries", type=int, default=200, help="Number of queries.")
+parser.add_argument("--k", type=int, default=10, help="Top-k.")
+parser.add_argument("--seed", type=int, default=0, help="Random seed.")
+args = parser.parse_args()
 
-rng = np.random.default_rng(0)
+N = args.n
+DIM = args.dim
+N_QUERIES = args.queries
+K = args.k
+
+rng = np.random.default_rng(args.seed)
 vecs = rng.standard_normal((N, DIM)).astype(np.float32)
 queries = rng.standard_normal((N_QUERIES, DIM)).astype(np.float32)
 

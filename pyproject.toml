@@ -11,6 +11,8 @@ dependencies = [
     "numpy>=1.26,<2.0",
     "numba>=0.59,<0.66",
     "pyroaring>=0.4",
+    "fastapi>=0.116,<1.0",
+    "uvicorn>=0.35,<1.0",
     "scikit-learn>=1.4,<2.0",
     "streamlit>=1.32,<1.46",
     "plotly>=5.20,<7.0",
@@ -22,6 +24,13 @@ dependencies = [
 dev = [
     "pytest>=8.0,<9.1",
     "hypothesis>=6.100",
+    "httpx>=0.28,<0.29",
+]
+bench = [
+    "psutil>=7.0",
+    "hnswlib>=0.8",
+    "annoy>=1.17",
+    "faiss-cpu>=1.8",
 ]
 
 [tool.setuptools.packages.find]

@@ -8,6 +8,12 @@ streamlit run viz/app.py
 
 The dashboard opens at `http://localhost:8501`.
 
+Quick smoke check (syntax-level) for all pages:
+
+```bash
+pytest -q tests/test_viz_smoke.py
+```
+
 ## Pages
 
 | Page | Key Visualization |

@@ -1,3 +1,3 @@
-from vexor.concurrency.locks import NodeLockRegistry
+from vexor.concurrency.locks import NodeLockRegistry, ReaderWriterLock
 
-__all__ = ["NodeLockRegistry"]
+__all__ = ["NodeLockRegistry", "ReaderWriterLock"]

@@ -37,4 +37,5 @@ def adaptive_nprobe(
     if mean_centroid_dist == 0.0:
         return base_nprobe
     scale = nearest_centroid_dist / mean_centroid_dist
-    return min(nlist, int(base_nprobe * scale * 1.5))
+    # Keep probing at least one list; truncation can otherwise return 0.
+    return max(1, min(nlist, int(base_nprobe * scale * 1.5)))

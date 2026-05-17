@@ -202,6 +202,8 @@ class HNSWIndex:
     def delete(self, vec_id: int) -> None:
         if vec_id not in self._vectors:
             return
+        if vec_id in self._deleted:
+            return
 
         repaired: list[tuple[int, int]] = []
         for layer in self._layers[vec_id]:
@@ -223,6 +225,7 @@ class HNSWIndex:
 
         with self._global_lock:
             self._deleted.add(vec_id)
+            self._bitmap.remove(vec_id, self._metadata.get(vec_id, {}))
             if vec_id == self._entry_point:
                 remaining = [v for v in self._vectors if v not in self._deleted]
                 self._entry_point = remaining[0] if remaining else None

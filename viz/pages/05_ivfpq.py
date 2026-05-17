@@ -37,16 +37,19 @@ with tab_codebook:
         st.session_state.update({
             "cb_pq": pq, "cb_codes": codes_cb,
             "cb_vecs": vecs_cb, "cb_dim": dim_cb,
+            "cb_M": M_cb, "cb_K": K_cb,
         })
 
     if "cb_pq" in st.session_state:
         pq = st.session_state["cb_pq"]
         codes = st.session_state["cb_codes"]
         vecs_cb = st.session_state["cb_vecs"]
+        M_used = int(st.session_state.get("cb_M", codes.shape[1]))
+        K_used = int(st.session_state.get("cb_K", int(codes.max()) + 1 if codes.size else 1))
 
         # Centroid usage heatmap
-        usage = np.zeros((M_cb, K_cb), dtype=np.int32)
-        for m in range(M_cb):
+        usage = np.zeros((M_used, K_used), dtype=np.int32)
+        for m in range(M_used):
             for c_id in codes[:, m]:
                 usage[m, c_id] += 1
 
@@ -73,7 +76,7 @@ with tab_codebook:
         # Compression table
         D = st.session_state["cb_dim"]
         float32_bytes = D * 4
-        pq_bytes = M_cb
+        pq_bytes = M_used
         st.write(f"**Compression:** {float32_bytes} bytes/vector → {pq_bytes} bytes/vector "
                  f"(**{float32_bytes // pq_bytes}× reduction**)")
 

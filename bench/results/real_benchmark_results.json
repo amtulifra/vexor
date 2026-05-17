@@ -1,0 +1,18 @@
+{
+  "dataset": "synthetic_n5000_d64",
+  "k": 10,
+  "generated_at": 1779006011.128793,
+  "results": [
+    {
+      "engine": "vexor_hnsw",
+      "recall_at_k": 0.808,
+      "qps": 1235.0812833527457,
+      "p50_ms": 0.8071455004028394,
+      "p95_ms": 0.8693631503774668,
+      "build_s": 21.80367995800043,
+      "build_throughput": 229.31908786183357,
+      "ram_delta_mb": 0.0,
+      "notes": ""
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+         507314 function calls in 0.095 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       50    0.000    0.000    0.095    0.002 /Users/ifra/Desktop/vexor/bench/../src/vexor/db.py:114(search)
+       50    0.001    0.000    0.095    0.002 /Users/ifra/Desktop/vexor/bench/../src/vexor/indexes/hnsw.py:166(search)
+      200    0.042    0.000    0.094    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/indexes/hnsw.py:260(_search_layer)
+    90012    0.029    0.000    0.039    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/indexes/hnsw.py:330(_dist)
+    90012    0.010    0.000    0.010    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/distance/kernels_jit.py:27(l2_distance_jit)
+    89812    0.002    0.000    0.002    0.000 {method 'add' of 'set' objects}
+    16049    0.002    0.000    0.002    0.000 {built-in method _heapq.heappop}
+    90012    0.002    0.000    0.002    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/hooks/base.py:19(on_search_visit)
+    31400    0.002    0.000    0.002    0.000 {built-in method _heapq.heappush}
+    90098    0.002    0.000    0.002    0.000 {built-in method builtins.len}
+     4416    0.001    0.000    0.001    0.000 {method 'get' of 'dict' objects}
+      200    0.000    0.000    0.001    0.000 {built-in method builtins.sorted}
+     4350    0.000    0.000    0.000    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/indexes/hnsw.py:302(<genexpr>)
+       50    0.000    0.000    0.000    0.000 {method 'astype' of 'numpy.ndarray' objects}
+       50    0.000    0.000    0.000    0.000 /Users/ifra/Desktop/vexor/bench/../src/vexor/db.py:224(_ensure_kdtree_built)
+      500    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+       50    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        2    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}
+
+

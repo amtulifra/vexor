@@ -86,3 +86,18 @@ class TestHNSWDeletion:
         hnsw.delete(0)
         hnsw.delete(0)
         assert hnsw.active_size == 19
+
+    def test_filtered_search_excludes_deleted_ids(self):
+        hnsw = HNSWIndex(DIM, M=16, ef_construction=200, ef_search=100)
+        for i, v in enumerate(_VECS[:100]):
+            label = "match" if i < 50 else "other"
+            hnsw.add(v, {"label": label})
+
+        deleted = set(range(30))
+        for vid in deleted:
+            hnsw.delete(vid)
+
+        results = hnsw.search(_QUERIES[0], k=20, filter={"label": "match"})
+        for vid, _ in results:
+            assert vid not in deleted
+            assert vid < 50

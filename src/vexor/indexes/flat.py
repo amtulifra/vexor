@@ -80,3 +80,14 @@ class FlatIndex:
         indices = indices[np.argsort(distances[indices])]
 
         return [(int(i), float(distances[i])) for i in indices if not np.isinf(distances[i])]
+
+    def search_batch(
+        self,
+        queries: np.ndarray,
+        k: int,
+        filter: Filter | None = None,
+    ) -> list[list[tuple[int, float]]]:
+        matrix_q = np.asarray(queries, dtype=np.float32)
+        if matrix_q.ndim != 2:
+            raise ValueError("queries must be a 2D matrix of shape (N, dim).")
+        return [self.search(q, k=k, filter=filter) for q in matrix_q]

@@ -85,6 +85,15 @@ class IVFIndex:
     def train(self, vectors: np.ndarray, n_iter: int = 50) -> None:
         """Train centroids via k-means++ on the provided vectors."""
         matrix = vectors.astype(np.float32)
+        if len(matrix) == 0:
+            raise ValueError("train() requires at least one vector.")
+
+        effective_nlist = min(self._nlist, len(matrix))
+        if effective_nlist != self._nlist:
+            self._nlist = effective_nlist
+            self._inverted_lists = [[] for _ in range(self._nlist)]
+            self._cluster_bitmaps = [BitmapIndex() for _ in range(self._nlist)]
+
         rng = np.random.default_rng(0)
         self._centroids = _kmeans_plus_plus(matrix, self._nlist, rng)
 
@@ -142,6 +151,7 @@ class IVFIndex:
         centroid_dists = self._batch_dist(query, self._centroids)
 
         effective_nprobe = nprobe or self._nprobe
+        effective_nprobe = max(1, min(effective_nprobe, self._nlist))
         if use_adaptive_nprobe:
             nearest_dist = float(centroid_dists.min())
             mean_dist = float(centroid_dists.mean())

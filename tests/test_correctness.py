@@ -13,6 +13,7 @@ from vexor.indexes.ivf import IVFIndex
 from vexor.indexes.ivfpq import IVFPQIndex
 from vexor.distance.kernels import cosine_distance, l2_distance, inner_product_distance
 from vexor.distance.kernels_jit import cosine_distance_jit, l2_distance_jit, inner_product_distance_jit
+from vexor.filtering.adaptive import adaptive_nprobe
 
 
 N = 500
@@ -153,6 +154,24 @@ class TestIVFIndex:
         with pytest.raises(RuntimeError):
             ivf.add(_VECS[0])
 
+    def test_train_handles_nlist_larger_than_dataset(self):
+        tiny = _VECS[:5]
+        ivf = IVFIndex(nlist=64, nprobe=8, metric="l2", online_updates=False)
+        ivf.train(tiny)
+        for v in tiny:
+            ivf.add(v)
+        results = ivf.search(_QUERIES[0], k=3)
+        assert len(results) == 3
+
+    def test_adaptive_nprobe_never_drops_below_one(self):
+        adjusted = adaptive_nprobe(
+            base_nprobe=4,
+            nlist=128,
+            nearest_centroid_dist=0.0001,
+            mean_centroid_dist=10.0,
+        )
+        assert adjusted >= 1
+
 
 # --- KD-Tree: exact on low dimensions ---
 
@@ -175,6 +194,10 @@ class TestKDTreeIndex:
         kd.add(_VECS[0])
         with pytest.raises(RuntimeError):
             kd.search(_VECS[1], k=1)
+
+    def test_empty_index_returns_empty(self):
+        kd = KDTreeIndex()
+        assert kd.search(_QUERIES[0], k=5) == []
 
 
 # --- IVFPQ ---

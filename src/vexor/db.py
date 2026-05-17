@@ -6,8 +6,6 @@ metadata filters, deleting, and persisting to disk with WAL-backed durability.
 """
 
 from __future__ import annotations
-import os
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -38,7 +36,7 @@ class VectorDB:
     dim : int
         Vector dimensionality.
     index_type : str
-        One of 'flat', 'kdtree', 'hnsw', 'ivf', 'ivfpq'.
+        One of 'flat', 'kdtree', 'hnsw', 'ivf', 'ivfpq', 'lsh'.
     metric : str
         Distance metric: 'cosine', 'l2', or 'inner_product'.
     wal_path : str | None
@@ -89,9 +87,27 @@ class VectorDB:
         return vec_id
 
     def add_batch(self, vectors: np.ndarray, metadata: list[dict[str, Any]] | None = None) -> list[int]:
-        ids = []
-        for i, v in enumerate(vectors):
-            meta = metadata[i] if metadata else None
+        """
+        Add multiple vectors.
+
+        Parameters
+        ----------
+        vectors : np.ndarray
+            Matrix of shape (N, dim).
+        metadata : list[dict[str, Any]] | None
+            Optional metadata per vector. Must match vectors length when provided.
+        """
+        matrix = np.asarray(vectors, dtype=np.float32)
+        if matrix.ndim != 2:
+            raise ValueError("vectors must be a 2D matrix of shape (N, dim).")
+        if matrix.shape[1] != self._dim:
+            raise ValueError(f"Expected vector dim {self._dim}, got {matrix.shape[1]}.")
+        if metadata is not None and len(metadata) != len(matrix):
+            raise ValueError("metadata length must match vectors length.")
+
+        ids: list[int] = []
+        for i, v in enumerate(matrix):
+            meta = metadata[i] if metadata is not None else None
             ids.append(self.add(v, meta))
         return ids
 
@@ -102,10 +118,29 @@ class VectorDB:
         filter: Filter | None = None,
         **search_kwargs,
     ) -> list[tuple[int, float]]:
-        if isinstance(self._index, KDTreeIndex) and not hasattr(self._index, "_root") or \
-                (isinstance(self._index, KDTreeIndex) and self._index._root is None):
-            self._index.build()
+        self._ensure_kdtree_built()
         return self._index.search(query, k=k, filter=filter, **search_kwargs)
+
+    def search_batch(
+        self,
+        queries: np.ndarray,
+        k: int = 10,
+        filter: Filter | None = None,
+        **search_kwargs,
+    ) -> list[list[tuple[int, float]]]:
+        """
+        Search multiple queries and return per-query top-k results.
+        """
+        matrix = np.asarray(queries, dtype=np.float32)
+        if matrix.ndim != 2:
+            raise ValueError("queries must be a 2D matrix of shape (N, dim).")
+        if matrix.shape[1] != self._dim:
+            raise ValueError(f"Expected query dim {self._dim}, got {matrix.shape[1]}.")
+
+        self._ensure_kdtree_built()
+        if hasattr(self._index, "search_batch"):
+            return self._index.search_batch(matrix, k=k, filter=filter, **search_kwargs)
+        return [self._index.search(q, k=k, filter=filter, **search_kwargs) for q in matrix]
 
     def delete(self, vec_id: int) -> None:
         if not hasattr(self._index, "delete"):
@@ -131,10 +166,51 @@ class VectorDB:
         if self._wal:
             self._wal.truncate()
 
+    @classmethod
+    def load(
+        cls,
+        path: str,
+        wal_path: str | None = None,
+        hook: VexorHook | None = None,
+        mmap_vectors: bool = False,
+    ) -> "VectorDB":
+        """
+        Load a database snapshot and optionally replay a WAL.
+
+        Snapshot contents are restored first without WAL writes to avoid
+        duplicating persisted operations.
+        """
+        payload = load_index(path, mmap_vectors=mmap_vectors)
+        index_type = payload["index_type"]
+        vectors = payload["vectors"]
+        metadata = payload.get("metadata") or []
+
+        if vectors.ndim != 2:
+            raise ValueError("Invalid snapshot: vectors must be a 2D matrix.")
+
+        dim = int(vectors.shape[1])
+        db = cls(dim=dim, index_type=index_type, hook=hook, wal_path=None)
+
+        if len(vectors) > 0:
+            if index_type in {"ivf", "ivfpq"}:
+                db.train(vectors)
+            for i, vec in enumerate(vectors):
+                meta = metadata[i] if i < len(metadata) and isinstance(metadata[i], dict) else {}
+                db.add(vec, metadata=meta)
+
+            if index_type == "kdtree":
+                db.build_kdtree()
+
+        if wal_path:
+            db._wal = WriteAheadLog(wal_path)
+            db.recover_from_wal()
+
+        return db
+
     def recover_from_wal(self) -> int:
         if not self._wal:
             return 0
-        entries = self._wal.replay()
+        entries = self._wal.replay(idempotent=True, advance_checkpoint=True)
         replayed = 0
         for entry in entries:
             if entry["op"] == _WAL_OP_INSERT:
@@ -144,6 +220,10 @@ class VectorDB:
                 self._index.delete(entry["vec_id"])
                 replayed += 1
         return replayed
+
+    def _ensure_kdtree_built(self) -> None:
+        if isinstance(self._index, KDTreeIndex) and self._index._root is None:
+            self._index.build()
 
     @staticmethod
     def _build_index(index_type: str, dim: int, metric: str, hook: VexorHook, **kwargs):

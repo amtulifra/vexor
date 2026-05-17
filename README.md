@@ -137,6 +137,12 @@ To include development dependencies (pytest, hypothesis):
 pip install -e ".[dev]"
 ```
 
+For optional benchmarking backends (FAISS/hnswlib/Annoy):
+
+```bash
+pip install -e ".[bench]"
+```
+
 
 **Dependencies installed automatically:**
 
@@ -151,6 +157,8 @@ pip install -e ".[dev]"
 | `plotly` | Interactive charts and network graphs |
 | `networkx` | HNSW graph rendering |
 | `matplotlib` | Static benchmark output |
+| `fastapi` | Optional REST API server |
+| `uvicorn` | ASGI runtime for API |
 
 
 ---
@@ -245,6 +253,35 @@ db2 = VectorDB.load("./index", wal_path="./vexor.wal")
 ```
 
 
+### Batch add + batch search
+
+```python
+db = VectorDB(dim=128, index_type="flat", metric="l2")
+
+ids = db.add_batch(vectors)               # vectors: (N, 128) float32
+results = db.search_batch(query_matrix, k=10)  # query_matrix: (Q, 128)
+```
+
+`search_batch()` returns one top-k result list per query.
+
+
+### REST API server
+
+```bash
+uvicorn vexor.api.app:app --host 0.0.0.0 --port 8000
+```
+
+Then:
+
+```bash
+curl -X POST http://127.0.0.1:8000/indexes \
+  -H "content-type: application/json" \
+  -d '{"name":"demo","dim":8,"index_type":"flat","metric":"l2"}'
+```
+
+More API examples: `docs/API.md`.
+
+
 ### Deletion
 
 
@@ -263,6 +300,10 @@ db.delete(vec_id)   # graph repair runs immediately; compacts at 20% threshold
 ```
 vexor/
  src/vexor/
+   api/
+     schemas.py          Pydantic request/response models for HTTP API
+     service.py          Thread-safe index registry and conversion helpers
+     app.py              FastAPI routes exposing VectorDB operations
    distance/
      kernels.py          NumPy baseline (cosine, L2, inner product)
      kernels_jit.py      Numba @njit + prange batch variants
@@ -366,6 +407,8 @@ python bench/filter_bench.py     # In-graph vs post-filter recall comparison
 python bench/memory_bench.py     # Compression/recall tradeoff for IVFPQ
 python bench/concurrency_bench.py
 python bench/latency_percentile_bench.py  # p50/p95/p99 vs recall
+python bench/real_benchmark.py --dataset synthetic --n 20000 --dim 128 --queries 200
+python bench/profile_search.py --index hnsw --n 50000 --dim 128 --queries 1000 --k 10
 ```
 
 
@@ -382,6 +425,8 @@ python bench/latency_percentile_bench.py  # p50/p95/p99 vs recall
 
 
 Charts saved to `bench/results/`.
+
+Profiling workflow and optimization writeup template: `docs/PROFILING.md`.
 
 
 ---
@@ -497,18 +542,18 @@ Rule of thumb: `ef_search ≥ k`. For recall > 0.99, `ef_search ≈ 3–5 × k`.
 
 **Benchmarking**
 - [ ] Run at full scale (N=500K, D=768) to validate the numbers in the overview table
-- [ ] Separate index build time from query time in `concurrency_bench.py` to get clean steady-state QPS numbers for multiprocessing
+- [x] Separate index build time from query time in `concurrency_bench.py` to get clean steady-state QPS numbers for multiprocessing
 - [x] Recall-vs-latency-percentile benchmark added (`bench/latency_percentile_bench.py`) — p50/p95/p99 per query, plotted against recall for HNSW and IVF parameter sweeps
 
 
 **API / usability**
-- [ ] REST API wrapper (FastAPI) so Vexor can be used as a standalone server
-- [ ] Batch `add()` and `search()` — current API is one vector at a time
-- [ ] Persistence: add `load()` support for every index type (currently WAL replay only)
+- [x] REST API wrapper (FastAPI) so Vexor can be used as a standalone server
+- [x] Batch `add()` and `search()` support via `VectorDB.add_batch()` and `VectorDB.search_batch()`
+- [x] Persistence: add `VectorDB.load()` snapshot restore + optional WAL replay
 
 
 **Viz**
-- [ ] Verify and fix rendering issues in viz pages 01–07
+- [x] Verify and fix rendering state drift issue in page 05 codebook view; add smoke compile test for all viz pages
 - [ ] Add a live concurrency page showing thread contention vs process isolation
 
 
